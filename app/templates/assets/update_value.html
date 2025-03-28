@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+
+{% block title %}Atualizar Valor - {{ asset.name }} - Controle de Investimentos{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-cash-coin"></i> Atualizar Valor de Investimento
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info mb-4">
+                    <h6 class="alert-heading fw-bold">Investimento: {{ asset.name }}</h6>
+                    <p class="mb-1"><strong>Tipo:</strong> {{ asset.type }}</p>
+                    <p class="mb-1"><strong>Emissor:</strong> {{ asset.issuer if asset.issuer else 'Não informado' }}</p>
+                    <p class="mb-1"><strong>Vencimento:</strong> {{ asset.maturity_date.strftime('%d/%m/%Y') if asset.maturity_date else 'Não informado' }}</p>
+                    <p class="mb-0"><strong>Valor Investido:</strong> R$ {{ "%.2f"|format(valor_investido) }}</p>
+                    
+                    {% if ultimo_valor %}
+                    <hr>
+                    <p class="mb-0 fw-bold">Última atualização: R$ {{ "%.2f"|format(ultimo_valor.current_value) }} ({{ ultimo_valor.date.strftime('%d/%m/%Y') }})</p>
+                    {% endif %}
+                </div>
+                
+                <form method="post" action="{{ url_for('update_asset_value', id=asset.id) }}">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="current_value" class="form-label">Valor Atual (R$) *</label>
+                            <input type="number" step="0.01" min="0" class="form-control" id="current_value" name="current_value" 
+                                  placeholder="Ex: 5250.00" required>
+                            <small class="text-muted">Informe o valor atual do investimento</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="date" class="form-label">Data da Atualização *</label>
+                            <input type="date" class="form-control" id="date" name="date" 
+                                   value="{{ today_date }}" required>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="notes" class="form-label">Observações</label>
+                        <textarea class="form-control" id="notes" name="notes" rows="2" 
+                                 placeholder="Ex: Consulta no Internet Banking"></textarea>
+                        <small class="text-muted">Informações adicionais sobre a atualização de valor</small>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between mt-4">
+                        <a href="{{ url_for('list_assets') }}" class="btn btn-secondary">
+                            <i class="bi bi-arrow-left"></i> Voltar
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-save"></i> Salvar
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,19 @@
+# Dependências principais
+Flask==2.2.3
+Flask-SQLAlchemy==3.0.3
+SQLAlchemy==2.0.5.post1
+Werkzeug==2.2.3
+Jinja2==3.1.2
+
+# Para manipulação de dados
+pandas==1.5.3
+numpy==1.24.2
+yfinance==0.2.18
+
+# Para processamento de arquivos
+openpyxl==3.1.2
+xlrd==2.0.1
+
+# Utilitários
+python-dotenv==1.0.0
+requests==2.28.2

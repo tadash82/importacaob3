@@ -1,0 +1,93 @@
+{% extends 'base.html' %}
+
+{% block title %}Importar Dados da B3 - Controle de Investimentos{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-cloud-upload"></i> Importar Dados da B3</h5>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info mb-4">
+                    <h5><i class="bi bi-info-circle"></i> Como importar seus dados da B3</h5>
+                    <ol>
+                        <li>Acesse o site da <a href="https://www.investidor.b3.com.br" target="_blank">B3</a> e faça login</li>
+                        <li>Navegue até "Extratos e Informativos"</li>
+                        <li>Selecione "Negociação" e escolha o período desejado</li>
+                        <li>Baixe o extrato em formato Excel (.xlsx)</li>
+                        <li>Faça upload do arquivo abaixo</li>
+                    </ol>
+                </div>
+
+                <form method="post" enctype="multipart/form-data">
+                    <div class="mb-4">
+                        <label for="file" class="form-label">Arquivo de Extrato da B3 (.xlsx ou .xls)</label>
+                        <input class="form-control" type="file" id="file" name="file" accept=".xlsx,.xls" required>
+                        <div class="form-text">Somente arquivos Excel serão aceitos.</div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between mt-4">
+                        <a href="{{ url_for('list_transactions') }}" class="btn btn-secondary">
+                            <i class="bi bi-arrow-left"></i> Voltar
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-upload"></i> Importar Dados
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card shadow mt-4">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="mb-0"><i class="bi bi-question-circle"></i> Perguntas Frequentes</h5>
+            </div>
+            <div class="card-body">
+                <div class="accordion" id="faqAccordion">
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="headingOne">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne">
+                                Quais dados são importados?
+                            </button>
+                        </h2>
+                        <div id="collapseOne" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                O sistema importa suas operações de compra e venda de ativos, incluindo código do ativo, 
+                                quantidade, preço unitário, data da operação e valor total.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="headingTwo">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTwo">
+                                O que acontece se eu importar o mesmo extrato várias vezes?
+                            </button>
+                        </h2>
+                        <div id="collapseTwo" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                O sistema tentará identificar operações duplicadas com base no código do ativo, data e valores,
+                                mas é recomendável verificar suas transações após a importação e remover possíveis duplicações manualmente.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="headingThree">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseThree">
+                                Preciso editar os dados depois de importados?
+                            </button>
+                        </h2>
+                        <div id="collapseThree" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+                            <div class="accordion-body">
+                                É recomendável revisar os ativos importados e complementar informações como nome completo,
+                                tipo de ativo e setor, pois o sistema importa apenas os códigos dos ativos.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

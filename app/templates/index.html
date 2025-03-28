@@ -1,0 +1,325 @@
+{% extends 'base.html' %}
+
+{% block title %}Início - Controle de Investimentos{% endblock %}
+
+{% block content %}
+<!-- Elemento oculto para armazenar tickers para carregamento assíncrono -->
+<div id="market-tickers" data-tickers="{{ market_tickers|tojson }}" style="display: none;"></div>
+
+<div class="row">
+    <div class="col-lg-12 mb-4">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-wallet2"></i> Resumo da Carteira</h5>
+                <div>
+                    <span id="loading-prices" class="text-white-50" style="display: none;">
+                        <i class="bi bi-arrow-repeat spin"></i> Atualizando cotações...
+                    </span>
+                </div>
+            </div>
+            <div class="card-body">
+                {% if portfolio %}
+                    <div class="row mb-4">
+                        <div class="col-md-3 mb-2">
+                            <div class="card border-primary">
+                                <div class="card-body text-center">
+                                    <h6 class="card-subtitle mb-2 text-muted">Investimento Total</h6>
+                                    <h4 class="card-title text-primary">R$ {{ "%.2f"|format(total_value) }}</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-2">
+                            <div class="card border-success">
+                                <div class="card-body text-center">
+                                    <h6 class="card-subtitle mb-2 text-muted">Valor Atual</h6>
+                                    <h4 class="card-title text-success" id="total-current-value">
+                                        <i class="bi bi-arrow-repeat spin"></i> Carregando...
+                                    </h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-2">
+                            <div class="card border-info">
+                                <div class="card-body text-center">
+                                    <h6 class="card-subtitle mb-2 text-muted">Variação (R$)</h6>
+                                    <h4 class="card-title text-info" id="total-variation-value">
+                                        <i class="bi bi-arrow-repeat spin"></i> Carregando...
+                                    </h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-2">
+                            <div class="card border-warning">
+                                <div class="card-body text-center">
+                                    <h6 class="card-subtitle mb-2 text-muted">Variação (%)</h6>
+                                    <h4 class="card-title text-warning" id="total-variation-percent">
+                                        <i class="bi bi-arrow-repeat spin"></i> Carregando...
+                                    </h4>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <ul class="nav nav-tabs" id="assetTypeTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="all-tab" data-bs-toggle="tab" data-bs-target="#all" type="button" role="tab" aria-selected="true">
+                                    Todos os Ativos
+                                </button>
+                            </li>
+                            {% for tipo in tipos_ativos %}
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="{{ tipo|replace(' ', '-')|lower }}-tab" data-bs-toggle="tab" 
+                                        data-bs-target="#{{ tipo|replace(' ', '-')|lower }}" type="button" role="tab" aria-selected="false">
+                                    {{ tipo }}
+                                </button>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    
+                    <div class="tab-content" id="assetTypeTabContent">
+                        <!-- Tab de todos os ativos -->
+                        <div class="tab-pane fade show active" id="all" role="tabpanel" aria-labelledby="all-tab">
+                            <div class="table-responsive">
+                                <table class="table table-striped table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Ticker</th>
+                                            <th>Nome</th>
+                                            <th>Tipo</th>
+                                            <th>Quantidade</th>
+                                            <th>Preço Médio</th>
+                                            <th>Preço Atual</th>
+                                            <th>Variação</th>
+                                            <th>Valor Total</th>
+                                            <th>% da Carteira</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for asset in portfolio %}
+                                        <tr class="asset-row" 
+                                            data-ticker="{{ asset.ticker }}" 
+                                            data-has-market-price="{{ asset.has_market_price|lower }}"
+                                            data-quantity="{{ asset.quantity }}"
+                                            data-avg-price="{{ asset.avg_price }}"
+                                            data-total-value="{{ asset.total_value }}"
+                                            {% if asset.current_price %}
+                                            data-current-price="{{ asset.current_price }}"
+                                            data-current-value="{{ asset.current_price * asset.quantity }}"
+                                            data-variation-value="{{ asset.price_variation_value }}"
+                                            {% endif %}>
+                                            <td><strong>{{ asset.ticker }}</strong></td>
+                                            <td>{{ asset.name }}</td>
+                                            <td>{{ asset.type }}</td>
+                                            <td>{{ asset.quantity }}</td>
+                                            <td>R$ {{ "%.2f"|format(asset.avg_price) }}</td>
+                                            <td>
+                                                <span class="current-price">
+                                                {% if asset.current_price %}
+                                                    R$ {{ "%.2f"|format(asset.current_price) }}
+                                                {% elif asset.has_market_price %}
+                                                    <span class="loading-indicator"><i class="bi bi-arrow-repeat spin"></i> Carregando...</span>
+                                                {% else %}
+                                                    <span class="text-muted">--</span>
+                                                {% endif %}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                {% if asset.price_variation is not none %}
+                                                    <div class="d-flex">
+                                                        <span class="price-variation
+                                                            {% if asset.price_variation > 0 %}text-success{% elif asset.price_variation < 0 %}text-danger{% endif %}
+                                                        ">
+                                                            <i class="bi bi-{% if asset.price_variation > 0 %}arrow-up-circle-fill{% elif asset.price_variation < 0 %}arrow-down-circle-fill{% else %}dash-circle{% endif %}"></i>
+                                                            {{ "%.2f"|format(asset.price_variation) }}%
+                                                        </span>
+                                                        <span class="ms-2 small variation-value {% if asset.price_variation_value > 0 %}text-success{% elif asset.price_variation_value < 0 %}text-danger{% endif %}">
+                                                            (R$ {{ "%.2f"|format(asset.price_variation_value) }})
+                                                        </span>
+                                                    </div>
+                                                {% elif asset.has_market_price %}
+                                                    <span class="loading-indicator"><i class="bi bi-arrow-repeat spin"></i> Carregando...</span>
+                                                {% else %}
+                                                    <span class="text-muted">--</span>
+                                                {% endif %}
+                                            </td>
+                                            <td class="current-value">R$ {{ "%.2f"|format(asset.total_value) }}</td>
+                                            <td>
+                                                <div class="progress-container">
+                                                    <div class="progress">
+                                                        <div class="progress-bar" role="progressbar" style="width: {{ asset.percentage }}%;" 
+                                                            aria-valuenow="{{ asset.percentage }}" aria-valuemin="0" aria-valuemax="100">
+                                                        </div>
+                                                    </div>
+                                                    <span class="progress-text">{{ "%.2f"|format(asset.percentage) }}%</span>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                    <tfoot>
+                                        <tr class="table-primary">
+                                            <th colspan="7">Valor Total da Carteira</th>
+                                            <th>R$ {{ "%.2f"|format(total_value) }}</th>
+                                            <th>100%</th>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <!-- Tabs por tipo de ativo -->
+                        {% for tipo in tipos_ativos %}
+                        <div class="tab-pane fade" id="{{ tipo|replace(' ', '-')|lower }}" role="tabpanel" 
+                             aria-labelledby="{{ tipo|replace(' ', '-')|lower }}-tab">
+                            <div class="table-responsive">
+                                <table class="table table-striped table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Ticker</th>
+                                            <th>Nome</th>
+                                            <th>Quantidade</th>
+                                            <th>Preço Médio</th>
+                                            <th>Preço Atual</th>
+                                            <th>Variação</th>
+                                            <th>Valor Total</th>
+                                            <th>% do Tipo</th>
+                                            <th>% da Carteira</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% set tipo_total = namespace(value=0) %}
+                                        {% for asset in portfolio %}
+                                            {% if asset.type == tipo %}
+                                                {% set tipo_total.value = tipo_total.value + asset.total_value %}
+                                            {% endif %}
+                                        {% endfor %}
+                                        
+                                        {% for asset in portfolio %}
+                                            {% if asset.type == tipo %}
+                                            <tr>
+                                                <td><strong>{{ asset.ticker }}</strong></td>
+                                                <td>{{ asset.name }}</td>
+                                                <td>{{ asset.quantity }}</td>
+                                                <td>R$ {{ "%.2f"|format(asset.avg_price) }}</td>
+                                                <td>
+                                                    {% if asset.current_price %}
+                                                        R$ {{ "%.2f"|format(asset.current_price) }}
+                                                    {% else %}
+                                                        <span class="text-muted">--</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    {% if asset.price_variation is not none %}
+                                                        <div class="d-flex">
+                                                            <span class="price-variation
+                                                                {% if asset.price_variation > 0 %}text-success{% elif asset.price_variation < 0 %}text-danger{% endif %}
+                                                            ">
+                                                                <i class="bi bi-{% if asset.price_variation > 0 %}arrow-up-circle-fill{% elif asset.price_variation < 0 %}arrow-down-circle-fill{% else %}dash-circle{% endif %}"></i>
+                                                                {{ "%.2f"|format(asset.price_variation) }}%
+                                                            </span>
+                                                            <span class="ms-2 small">
+                                                                (R$ {{ "%.2f"|format(asset.price_variation_value) }})
+                                                            </span>
+                                                        </div>
+                                                    {% else %}
+                                                        <span class="text-muted">--</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>R$ {{ "%.2f"|format(asset.total_value) }}</td>
+                                                <td>
+                                                    <div class="progress-container">
+                                                        <div class="progress">
+                                                            <div class="progress-bar bg-info" role="progressbar" 
+                                                                style="width: {{ (asset.total_value / tipo_total.value * 100) if tipo_total.value > 0 else 0 }}%;">
+                                                            </div>
+                                                        </div>
+                                                        <span class="progress-text">{{ "%.2f"|format(asset.total_value / tipo_total.value * 100 if tipo_total.value > 0 else 0) }}%</span>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <div class="progress-container">
+                                                        <div class="progress">
+                                                            <div class="progress-bar" role="progressbar" style="width: {{ asset.percentage }}%;">
+                                                            </div>
+                                                        </div>
+                                                        <span class="progress-text">{{ "%.2f"|format(asset.percentage) }}%</span>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </tbody>
+                                    <tfoot>
+                                        <tr class="table-info">
+                                            <th colspan="6">Total em {{ tipo }}</th>
+                                            <th>R$ {{ "%.2f"|format(tipo_total.value) }}</th>
+                                            <th>100%</th>
+                                            <th>{{ "%.2f"|format(tipo_total.value / total_value * 100 if total_value > 0 else 0) }}%</th>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="alert alert-info">
+                        <h5><i class="bi bi-info-circle"></i> Sua carteira está vazia</h5>
+                        <p>Para começar a adicionar ativos à sua carteira, você pode:</p>
+                        <ul>
+                            <li><a href="{{ url_for('new_asset') }}">Adicionar um novo ativo manualmente</a></li>
+                            <li><a href="{{ url_for('import_b3') }}">Importar seus dados da B3</a></li>
+                        </ul>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6 mb-4">
+        <div class="card shadow">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="bi bi-plus-circle"></i> Ações Rápidas</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('new_asset') }}" class="btn btn-outline-primary">
+                        <i class="bi bi-plus-lg"></i> Adicionar Novo Ativo
+                    </a>
+                    <a href="{{ url_for('new_transaction') }}" class="btn btn-outline-success">
+                        <i class="bi bi-arrow-left-right"></i> Registrar Transação
+                    </a>
+                    <a href="{{ url_for('import_b3') }}" class="btn btn-outline-secondary">
+                        <i class="bi bi-cloud-upload"></i> Importar Dados da B3
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6 mb-4">
+        <div class="card shadow">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> Informações do Sistema</h5>
+            </div>
+            <div class="card-body">
+                <p><strong>Este sistema permite:</strong></p>
+                <ul>
+                    <li>Organizar ativos em categorias</li>
+                    <li>Registrar transações de compra e venda</li>
+                    <li>Importar dados diretamente da B3</li>
+                    <li>Calcular preço médio dos ativos</li>
+                    <li>Visualizar o balanceamento da carteira</li>
+                </ul>
+                <a href="{{ url_for('dashboard') }}" class="btn btn-info mt-2">
+                    <i class="bi bi-graph-up"></i> Ver Dashboard Completo
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

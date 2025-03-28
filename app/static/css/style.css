@@ -1,0 +1,236 @@
+/* Estilos personalizados para o sistema de controle de investimentos */
+
+/* Estilos gerais */
+body {
+    font-family: 'Nunito', sans-serif;
+    background-color: #f8f9fc;
+}
+
+/* Espaçamento vertical para o container principal */
+.container {
+    padding-top: 20px;
+    padding-bottom: 20px;
+}
+
+/* Estilo para cards */
+.card {
+    border: none;
+    border-radius: 8px;
+    box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
+    margin-bottom: 24px;
+}
+
+.card-header {
+    border-top-left-radius: 8px !important;
+    border-top-right-radius: 8px !important;
+    padding: 1rem 1.25rem;
+}
+
+/* Bordas redondas para inputs */
+.form-control,
+.form-select {
+    border-radius: 6px;
+}
+
+/* Estilo para tabelas */
+.table {
+    color: #444;
+}
+
+.table thead th {
+    background-color: rgba(0, 0, 0, 0.03);
+    border-bottom: none;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
+}
+
+/* Progress bar personalizado */
+.progress {
+    height: 10px;
+    border-radius: 50px;
+    margin-bottom: 0;
+}
+
+.progress-bar {
+    background-color: #4e73df;
+    border-radius: 50px;
+}
+
+/* Novos estilos para o container da barra de progresso */
+.progress-container {
+    position: relative;
+    width: 100%;
+    display: flex;
+    align-items: center;
+}
+
+.progress-container .progress {
+    flex: 1;
+    margin-right: 10px;
+}
+
+.progress-text {
+    font-size: 0.85rem;
+    font-weight: 600;
+    white-space: nowrap;
+    min-width: 45px;
+}
+
+/* Badge personalizado */
+.badge.bg-success {
+    background-color: #1cc88a !important;
+    font-weight: 500;
+}
+
+.badge.bg-danger {
+    background-color: #e74a3b !important;
+    font-weight: 500;
+}
+
+/* Botões personalizados */
+.btn {
+    border-radius: 6px;
+    font-weight: 500;
+}
+
+/* Cores dos gráficos */
+.bg-primary {
+    background-color: #4e73df !important;
+}
+
+.bg-success {
+    background-color: #1cc88a !important;
+}
+
+.bg-info {
+    background-color: #36b9cc !important;
+}
+
+.bg-warning {
+    background-color: #f6c23e !important;
+}
+
+.bg-danger {
+    background-color: #e74a3b !important;
+}
+
+.bg-secondary {
+    background-color: #858796 !important;
+}
+
+/* Estilo para as abas */
+.nav-tabs .nav-link {
+    border-radius: 8px 8px 0 0;
+    font-weight: 500;
+}
+
+.nav-tabs .nav-link.active {
+    background-color: #f8f9fc;
+    border-bottom-color: #f8f9fc;
+}
+
+/* Responsividade para dispositivos móveis */
+@media (max-width: 768px) {
+    .display-4 {
+        font-size: 2.5rem;
+    }
+
+    h2 {
+        font-size: 1.75rem;
+    }
+
+    .table {
+        font-size: 0.9rem;
+    }
+}
+
+/* Dashboard cards */
+.dashboard-card {
+    transition: transform 0.3s;
+}
+
+.dashboard-card:hover {
+    transform: translateY(-5px);
+}
+
+/* Animação de carregamento (spin) */
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.spin {
+    animation: spin 1.5s linear infinite;
+    display: inline-block;
+}
+
+/* Estado de carregamento para células de preço */
+.loading-price {
+    position: relative;
+}
+
+.loading-price::after {
+    content: '';
+    position: absolute;
+    width: 100%;
+    height: 2px;
+    bottom: 0;
+    left: 0;
+    background: linear-gradient(90deg, #f0f0f0, #4e73df, #f0f0f0);
+    background-size: 200% 100%;
+    animation: loading-bar 1.5s ease-in-out infinite;
+}
+
+@keyframes loading-bar {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* Efeito de pulsação para indicar carregamento */
+@keyframes pulse {
+    0% { opacity: 0.6; }
+    50% { opacity: 1; }
+    100% { opacity: 0.6; }
+}
+
+.loading-indicator {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 8px;
+    color: #4e73df;
+}
+
+.loading-indicator .bi-arrow-repeat {
+    margin-right: 4px;
+    animation: spin 1.5s linear infinite;
+}
+
+/* Esconder inicialmente o indicador de carregamento */
+#loading-prices {
+    display: none;
+}
+
+/* Estilo para valores de variação positiva/negativa */
+.variation-value-cell {
+    opacity: 0.7;
+    font-size: 0.85em;
+}
+
+/* Estilos para o gráfico de desempenho */
+#performanceChart {
+    min-height: 250px;
+}
+
+/* Melhorias nos ícones */
+.bi {
+    vertical-align: -0.125em;
+}
+
+/* Estado desabilitado para inputs */
+.form-control:disabled, 
+.form-control[readonly] {
+    background-color: #f8f9fc;
+    opacity: 0.7;
+}

@@ -1,0 +1,115 @@
+{% extends 'base.html' %}
+
+{% block title %}Ativos - Controle de Investimentos{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-safe"></i> Meus Ativos</h2>
+    <a href="{{ url_for('new_asset') }}" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> Novo Ativo
+    </a>
+</div>
+
+{% if assets %}
+    <div class="card shadow mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Lista de Ativos</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover table-striped">
+                    <thead>
+                        <tr>
+                            <th>Ticker</th>
+                            <th>Nome</th>
+                            <th>Tipo</th>
+                            <th>Setor</th>
+                            <th>Quantidade</th>
+                            <th>Preço Médio</th>
+                            <th>Valor Total</th>
+                            <th>Rendimento</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for asset in assets %}
+                        <tr>
+                            <td class="fw-bold">{{ asset.ticker }}</td>
+                            <td>{{ asset.name }}</td>
+                            <td>{{ asset.type }}</td>
+                            <td>{{ asset.sector }}</td>
+                            <td>{{ asset.current_quantity() }}</td>
+                            <td>R$ {{ "%.2f"|format(asset.calculate_average_price()) }}</td>
+                            <td>R$ {{ "%.2f"|format(asset.current_quantity() * asset.calculate_average_price()) }}</td>
+                            <td>
+                                {% if not asset.has_market_price %}
+                                    {% set yield_info = asset.calculate_yield() %}
+                                    {% if yield_info and yield_info.current_value > 0 %}
+                                        <div>
+                                            <span class="badge {% if yield_info.percentage_yield >= 0 %}bg-success{% else %}bg-danger{% endif %}">
+                                                {{ "%.2f"|format(yield_info.percentage_yield) }}%
+                                            </span>
+                                            <small class="text-muted d-block">R$ {{ "%.2f"|format(yield_info.current_value) }}</small>
+                                        </div>
+                                    {% else %}
+                                        <span class="text-muted">Não informado</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-muted">Preço de mercado</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="btn-group" role="group">
+                                    {% if not asset.has_market_price %}
+                                    <a href="{{ url_for('update_asset_value', id=asset.id) }}" class="btn btn-sm btn-outline-success">
+                                        <i class="bi bi-cash-coin"></i>
+                                    </a>
+                                    {% endif %}
+                                    <a href="{{ url_for('edit_asset', id=asset.id) }}" class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" 
+                                            data-bs-toggle="modal" data-bs-target="#deleteModal{{ asset.id }}">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                                
+                                <!-- Modal de confirmação de exclusão -->
+                                <div class="modal fade" id="deleteModal{{ asset.id }}" tabindex="-1" aria-hidden="true">
+                                    <div class="modal-dialog">
+                                        <div class="modal-content">
+                                            <div class="modal-header bg-danger text-white">
+                                                <h5 class="modal-title">Confirmar Exclusão</h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <p>Tem certeza que deseja excluir o ativo <strong>{{ asset.ticker }}</strong>?</p>
+                                                <p class="text-danger">
+                                                    <i class="bi bi-exclamation-triangle"></i> Esta ação também excluirá todas as transações relacionadas a este ativo.
+                                                </p>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                                <form action="{{ url_for('delete_asset', id=asset.id) }}" method="post">
+                                                    <button type="submit" class="btn btn-danger">Excluir</button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+{% else %}
+    <div class="alert alert-info">
+        <h5><i class="bi bi-info-circle"></i> Nenhum ativo encontrado</h5>
+        <p>Você ainda não possui ativos cadastrados. Clique no botão "Novo Ativo" para adicionar seu primeiro ativo.</p>
+        <p>Alternativamente, você pode <a href="{{ url_for('import_b3') }}">importar seus dados da B3</a>.</p>
+    </div>
+{% endif %}
+{% endblock %}

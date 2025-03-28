@@ -1,0 +1,440 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if asset %}Editar{% else %}Novo{% endif %} Ativo - Controle de Investimentos{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-{% if asset %}pencil{% else %}plus-circle{% endif %}"></i> 
+                    {% if asset %}Editar{% else %}Adicionar{% endif %} Ativo
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('edit_asset', id=asset.id) if asset else url_for('new_asset') }}" id="assetForm">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="ticker_type" class="form-label">Tipo de Identificador *</label>
+                            <select class="form-select" id="ticker_type" name="ticker_type" required>
+                                {% if asset %}
+                                    {% set is_market_asset = asset.has_market_price if asset.has_market_price is defined else (not asset.ticker.startswith('LCA') and not asset.ticker.startswith('LCI') and not asset.ticker.startswith('CDB') and not asset.ticker.startswith('TD') and not asset.ticker.startswith('DEB')) %}
+                                {% endif %}
+                                <option value="market" {% if not asset or (asset and is_market_asset) %}selected{% endif %}>Ticker de Mercado (ações, FIIs, ETFs)</option>
+                                <option value="fixed_income" {% if asset and not is_market_asset %}selected{% endif %}>Ativo de Renda Fixa (sem ticker)</option>
+                            </select>
+                            <small class="text-muted">Selecione se o ativo possui um código de negociação em bolsa</small>
+                        </div>
+                    </div>
+
+                    <!-- Seção para ativos de mercado -->
+                    <div class="row mb-3" id="market_ticker_section" {% if asset and not is_market_asset %}style="display: none;"{% endif %}>
+                        <div class="col-md-6">
+                            <label for="ticker" class="form-label">Ticker *</label>
+                            <input type="text" class="form-control" id="ticker" name="ticker" 
+                                   value="{{ asset.ticker if asset and is_market_asset else '' }}"
+                                   placeholder="Ex: PETR4, ITUB3, BOVA11">
+                            <small class="text-muted">Código do ativo na B3</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="name" class="form-label">Nome *</label>
+                            <input type="text" class="form-control" id="name" name="name" 
+                                   value="{{ asset.name if asset else '' }}" required
+                                   placeholder="Ex: Petrobras, Itaú, ETF Ibovespa">
+                        </div>
+                    </div>
+
+                    <!-- Seção para renda fixa -->
+                    <div class="row mb-3" id="fixed_income_section" {% if not asset or is_market_asset %}style="display: none;"{% endif %}>
+                        <div class="col-md-6">
+                            <label for="fixed_income_type" class="form-label">Produto de Renda Fixa *</label>
+                            <select class="form-select" id="fixed_income_type" name="fixed_income_type">
+                                <option value="LCA" {% if asset and not is_market_asset and 'LCA' in asset.ticker %}selected{% endif %}>LCA - Letra de Crédito do Agronegócio</option>
+                                <option value="LCI" {% if asset and not is_market_asset and 'LCI' in asset.ticker %}selected{% endif %}>LCI - Letra de Crédito Imobiliário</option>
+                                <option value="CDB" {% if asset and not is_market_asset and 'CDB' in asset.ticker %}selected{% endif %}>CDB - Certificado de Depósito Bancário</option>
+                                <option value="TD" {% if asset and not is_market_asset and 'TD' in asset.ticker %}selected{% endif %}>Tesouro Direto</option>
+                                <option value="DEB" {% if asset and not is_market_asset and 'DEB' in asset.ticker %}selected{% endif %}>Debênture</option>
+                                <option value="OUTRO" {% if asset and not is_market_asset and 'OUTRO' in asset.ticker %}selected{% endif %}>Outro</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="issuer" class="form-label">Emissor</label>
+                            <input type="text" class="form-control" id="issuer" name="issuer"
+                                   value="{{ asset.issuer if asset and asset.issuer else '' }}"
+                                   placeholder="Ex: Banco Bradesco, Tesouro Nacional">
+                            <small class="text-muted">Instituição que emitiu o título</small>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3" id="fixed_income_details" {% if not asset or is_market_asset %}style="display: none;"{% endif %}>
+                        <div class="col-md-6">
+                            <label for="fixed_income_name" class="form-label">Descrição *</label>
+                            <input type="text" class="form-control" id="fixed_income_name" name="fixed_income_name"
+                                   value="{{ asset.name if asset and not is_market_asset else '' }}"
+                                   placeholder="Ex: LCA Bradesco 120% CDI">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="maturity_date" class="form-label">Data de Vencimento</label>
+                            <input type="date" class="form-control" id="maturity_date" name="maturity_date"
+                                   value="{{ asset.maturity_date.strftime('%Y-%m-%d') if asset and asset.maturity_date else '' }}">
+                        </div>
+                    </div>
+
+                    <!-- Início: Novos campos para investimento em renda fixa -->
+                    <div class="row mb-3" id="investment_details" {% if not asset or is_market_asset %}style="display: none;"{% endif %}>
+                        <div class="col-md-6">
+                            <label for="investment_date" class="form-label">Data do Investimento *</label>
+                            <input type="date" class="form-control" id="investment_date" name="investment_date"
+                                  value="{{ today_date }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="investment_value" class="form-label">Valor Investido (R$) *</label>
+                            <input type="number" step="0.01" min="0" class="form-control" id="investment_value" name="investment_value"
+                                  placeholder="Ex: 5000.00" required>
+                            <small class="text-muted">Valor total investido</small>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3" id="investment_additional" {% if not asset or is_market_asset %}style="display: none;"{% endif %}>
+                        <div class="col-md-6">
+                            <label for="investment_quantity" class="form-label">Quantidade</label>
+                            <input type="number" min="1" value="1" class="form-control" id="investment_quantity" name="investment_quantity">
+                            <small class="text-muted">Normalmente é 1 para renda fixa</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="investment_notes" class="form-label">Observações</label>
+                            <textarea class="form-control" id="investment_notes" name="investment_notes" rows="2"></textarea>
+                            <small class="text-muted">Informações adicionais sobre o investimento</small>
+                        </div>
+                    </div>
+                    <!-- Fim: Novos campos para investimento em renda fixa -->
+
+                    <!-- Tipo de ativo e setor -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="type" class="form-label">Tipo de Ativo *</label>
+                            <div class="input-group mb-2">
+                                <select class="form-select" id="type" name="type" required>
+                                    <option value="" disabled {% if not asset %}selected{% endif %}>Selecione...</option>
+                                    {% set asset_types = ['Ação', 'FII', 'ETF', 'BDR', 'Tesouro Direto', 'CDB', 'LCI', 'LCA', 'Debênture', 'Outro'] %}
+                                    
+                                    <!-- Tipos de ativos padrão -->
+                                    <optgroup label="Tipos Padrão">
+                                        {% for type in asset_types %}
+                                            <option value="{{ type }}" {% if asset and asset.type == type %}selected{% endif %}>{{ type }}</option>
+                                        {% endfor %}
+                                    </optgroup>
+                                    
+                                    <!-- Tipos de ativos personalizados do banco de dados -->
+                                    {% if db_asset_types %}
+                                        <optgroup label="Tipos Personalizados">
+                                            {% for type in db_asset_types %}
+                                                <option value="{{ type }}" {% if asset and asset.type == type %}selected{% endif %}>{{ type }}</option>
+                                            {% endfor %}
+                                        </optgroup>
+                                    {% endif %}
+                                    
+                                    <option value="custom" {% if asset and asset.type not in asset_types and (not db_asset_types or asset.type not in db_asset_types) %}selected{% endif %}>Outro (personalizado)</option>
+                                </select>
+                                <button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#customTypeModal">
+                                    <i class="bi bi-plus-lg"></i>
+                                </button>
+                            </div>
+                            <div id="customTypeContainer" class="mt-2" {% if not asset or asset.type in asset_types or (db_asset_types and asset.type in db_asset_types) %}style="display: none;"{% endif %}>
+                                <input type="text" class="form-control" id="customType" name="customType" 
+                                      placeholder="Digite o tipo personalizado" value="{{ asset.type if asset and asset.type not in asset_types and (not db_asset_types or asset.type not in db_asset_types) else '' }}">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="sector" class="form-label">Setor</label>
+                            <div class="input-group mb-2">
+                                <select class="form-select" id="sector" name="sector">
+                                    <option value="" {% if not asset or not asset.sector %}selected{% endif %}>Nenhum</option>
+                                    
+                                    <!-- Setores padrão -->
+                                    {% set sectors = ['Financeiro', 'Energia', 'Tecnologia', 'Consumo', 'Saúde', 'Industrial', 'Imobiliário', 'Commodities', 'Utilidades', 'Telecomunicações', 'Outros'] %}
+                                    <optgroup label="Setores Padrão">
+                                        {% for sector in sectors %}
+                                            <option value="{{ sector }}" {% if asset and asset.sector == sector %}selected{% endif %}>{{ sector }}</option>
+                                        {% endfor %}
+                                    </optgroup>
+                                    
+                                    <!-- Setores personalizados do banco de dados -->
+                                    {% if db_sectors %}
+                                        <optgroup label="Setores Personalizados">
+                                            {% for sector in db_sectors %}
+                                                <option value="{{ sector }}" {% if asset and asset.sector == sector %}selected{% endif %}>{{ sector }}</option>
+                                            {% endfor %}
+                                        </optgroup>
+                                    {% endif %}
+                                    
+                                    <option value="custom" {% if asset and asset.sector and asset.sector not in sectors and (not db_sectors or asset.sector not in db_sectors) %}selected{% endif %}>Outro (personalizado)</option>
+                                </select>
+                                <button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#customSectorModal">
+                                    <i class="bi bi-plus-lg"></i>
+                                </button>
+                            </div>
+                            <div id="customSectorContainer" class="mt-2" {% if not asset or not asset.sector or asset.sector in sectors or (db_sectors and asset.sector in db_sectors) %}style="display: none;"{% endif %}>
+                                <input type="text" class="form-control" id="customSector" name="customSector" 
+                                      placeholder="Digite o setor personalizado" value="{{ asset.sector if asset and asset.sector and asset.sector not in sectors and (not db_sectors or asset.sector not in db_sectors) else '' }}">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex justify-content-between mt-4">
+                        <a href="{{ url_for('list_assets') }}" class="btn btn-secondary">
+                            <i class="bi bi-arrow-left"></i> Voltar
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-save"></i> Salvar
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modais -->
+<!-- Modal para adicionar tipo personalizado -->
+<div class="modal fade" id="customTypeModal" tabindex="-1" aria-labelledby="customTypeModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="customTypeModalLabel">Adicionar Tipo de Ativo</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="newAssetType" class="form-label">Nome do Tipo de Ativo</label>
+                    <input type="text" class="form-control" id="newAssetType" placeholder="Ex: Criptomoeda, Fundo Offshore">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="addNewAssetType">Adicionar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para adicionar setor personalizado -->
+<div class="modal fade" id="customSectorModal" tabindex="-1" aria-labelledby="customSectorModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="customSectorModalLabel">Adicionar Setor</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="newSector" class="form-label">Nome do Setor</label>
+                    <input type="text" class="form-control" id="newSector" placeholder="Ex: Agricultura, Educação">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="addNewSector">Adicionar</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Controle para tipo personalizado e setor
+    const typeSelect = document.getElementById('type');
+    const customTypeContainer = document.getElementById('customTypeContainer');
+    const customTypeInput = document.getElementById('customType');
+
+    // Verificar o estado inicial
+    if (typeSelect.value === 'custom') {
+        customTypeContainer.style.display = 'block';
+        customTypeInput.setAttribute('required', 'required');
+    }
+
+    typeSelect.addEventListener('change', function() {
+        if (this.value === 'custom') {
+            customTypeContainer.style.display = 'block';
+            customTypeInput.setAttribute('required', 'required');
+        } else {
+            customTypeContainer.style.display = 'none';
+            customTypeInput.removeAttribute('required');
+        }
+    });
+
+    // Controle para mostrar/ocultar campo de setor personalizado
+    const sectorSelect = document.getElementById('sector');
+    const customSectorContainer = document.getElementById('customSectorContainer');
+    const customSectorInput = document.getElementById('customSector');
+
+    // Verificar o estado inicial
+    if (sectorSelect.value === 'custom') {
+        customSectorContainer.style.display = 'block';
+        customSectorInput.setAttribute('required', 'required');
+    }
+
+    sectorSelect.addEventListener('change', function() {
+        if (this.value === 'custom') {
+            customSectorContainer.style.display = 'block';
+            customSectorInput.setAttribute('required', 'required');
+        } else {
+            customSectorContainer.style.display = 'none';
+            customSectorInput.removeAttribute('required');
+        }
+    });
+
+    // Adicionar novo tipo de ativo
+    const addNewAssetTypeBtn = document.getElementById('addNewAssetType');
+    const newAssetTypeInput = document.getElementById('newAssetType');
+    
+    addNewAssetTypeBtn.addEventListener('click', function() {
+        const newType = newAssetTypeInput.value.trim();
+        if (newType) {
+            // Adicionar a nova opção ao select
+            const customOption = typeSelect.querySelector('option[value="custom"]');
+            const newOption = new Option(newType, newType);
+            newOption.selected = true;
+            
+            // Verifique se existe um optgroup para tipos personalizados
+            let customTypesGroup = typeSelect.querySelector('optgroup[label="Tipos Personalizados"]');
+            
+            // Se não existir, crie um novo optgroup
+            if (!customTypesGroup) {
+                customTypesGroup = document.createElement('optgroup');
+                customTypesGroup.label = "Tipos Personalizados";
+                typeSelect.insertBefore(customTypesGroup, customOption);
+            }
+            
+            // Adicione a opção ao optgroup de tipos personalizados
+            customTypesGroup.appendChild(newOption);
+            
+            // Esconder campo personalizado
+            customTypeContainer.style.display = 'none';
+            customTypeInput.removeAttribute('required');
+            
+            // Fechar o modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('customTypeModal'));
+            modal.hide();
+            
+            // Limpar o campo
+            newAssetTypeInput.value = '';
+        }
+    });
+
+    // Adicionar novo setor
+    const addNewSectorBtn = document.getElementById('addNewSector');
+    const newSectorInput = document.getElementById('newSector');
+    
+    addNewSectorBtn.addEventListener('click', function() {
+        const newSector = newSectorInput.value.trim();
+        if (newSector) {
+            // Adicionar a nova opção ao select
+            const customOption = sectorSelect.querySelector('option[value="custom"]');
+            const newOption = new Option(newSector, newSector);
+            newOption.selected = true;
+            
+            // Verifique se existe um optgroup para setores personalizados
+            let customSectorsGroup = sectorSelect.querySelector('optgroup[label="Setores Personalizados"]');
+            
+            // Se não existir, crie um novo optgroup
+            if (!customSectorsGroup) {
+                customSectorsGroup = document.createElement('optgroup');
+                customSectorsGroup.label = "Setores Personalizados";
+                sectorSelect.insertBefore(customSectorsGroup, customOption);
+            }
+            
+            // Adicione a opção ao optgroup de setores personalizados
+            customSectorsGroup.appendChild(newOption);
+            
+            // Esconder campo personalizado
+            customSectorContainer.style.display = 'none';
+            customSectorInput.removeAttribute('required');
+            
+            // Fechar o modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('customSectorModal'));
+            modal.hide();
+            
+            // Limpar o campo
+            newSectorInput.value = '';
+        }
+    });
+
+    // Controle para mostrar/ocultar campos baseado no tipo de identificador
+    const tickerTypeSelect = document.getElementById('ticker_type');
+    const marketTickerSection = document.getElementById('market_ticker_section');
+    const fixedIncomeSection = document.getElementById('fixed_income_section');
+    const fixedIncomeDetails = document.getElementById('fixed_income_details');
+    const investmentDetails = document.getElementById('investment_details');
+    const investmentAdditional = document.getElementById('investment_additional');
+    const tickerInput = document.getElementById('ticker');
+    const nameInput = document.getElementById('name');
+    const fixedIncomeNameInput = document.getElementById('fixed_income_name');
+    const investmentValueInput = document.getElementById('investment_value');
+    const investmentDateInput = document.getElementById('investment_date');
+    
+    tickerTypeSelect.addEventListener('change', function() {
+        if (this.value === 'market') {
+            marketTickerSection.style.display = 'flex';
+            fixedIncomeSection.style.display = 'none';
+            fixedIncomeDetails.style.display = 'none';
+            investmentDetails.style.display = 'none';
+            investmentAdditional.style.display = 'none';
+            
+            tickerInput.setAttribute('required', 'required');
+            fixedIncomeNameInput.removeAttribute('required');
+            investmentValueInput.removeAttribute('required');
+            investmentDateInput.removeAttribute('required');
+            
+            // Usar valor do campo nome padrão
+            nameInput.setAttribute('required', 'required');
+        } else {
+            marketTickerSection.style.display = 'none';
+            fixedIncomeSection.style.display = 'flex';
+            fixedIncomeDetails.style.display = 'flex';
+            investmentDetails.style.display = 'flex';
+            investmentAdditional.style.display = 'flex';
+            
+            tickerInput.removeAttribute('required');
+            fixedIncomeNameInput.setAttribute('required', 'required');
+            investmentValueInput.setAttribute('required', 'required');
+            investmentDateInput.setAttribute('required', 'required');
+            
+            // Usar valor do campo nome para renda fixa
+            nameInput.removeAttribute('required');
+        }
+    });
+    
+    // Verificar estado inicial para mostrar/ocultar campos de investimento
+    if (tickerTypeSelect.value === 'fixed_income') {
+        investmentDetails.style.display = 'flex';
+        investmentAdditional.style.display = 'flex';
+        investmentValueInput.setAttribute('required', 'required');
+        investmentDateInput.setAttribute('required', 'required');
+    }
+    
+    // Adicionar validação final para garantir que ao menos um tipo de nome está preenchido
+    const assetForm = document.getElementById('assetForm');
+    assetForm.addEventListener('submit', function(e) {
+        const tickerType = tickerTypeSelect.value;
+        
+        if (tickerType === 'market' && !tickerInput.value.trim()) {
+            e.preventDefault();
+            alert('Por favor, informe o ticker do ativo');
+            return false;
+        }
+        
+        if (tickerType === 'fixed_income' && !fixedIncomeNameInput.value.trim()) {
+            e.preventDefault();
+            alert('Por favor, informe a descrição do ativo de renda fixa');
+            return false;
+        }
+        
+        return true;
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,786 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - Controle de Investimentos{% endblock %}
+
+{% block content %}
+<!-- Elemento oculto para armazenar tickers para carregamento assíncrono -->
+<div id="market-tickers" data-tickers="{{ market_tickers|tojson }}" style="display: none;"></div>
+
+<h2 class="mb-4"><i class="bi bi-pie-chart"></i> Dashboard</h2>
+
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card shadow dashboard-card">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-currency-dollar"></i> Valor da Carteira</h5>
+                <div>
+                    <button id="refresh-prices-btn" class="btn btn-sm btn-light text-primary border-0">
+                        <i class="bi bi-arrow-repeat"></i> Atualizar
+                    </button>
+                    <span id="loading-prices" class="text-white-50" style="display: none;">
+                        <i class="bi bi-arrow-repeat spin"></i> Atualizando...
+                    </span>
+                </div>
+            </div>
+            <div class="card-body d-flex flex-column align-items-center justify-content-center" style="padding: 0.75rem; min-height: 140px;">
+                <h2 class="fs-4 mb-0">Custo: R$ {{ "%.2f"|format(total_value|default(0)) }}</h2>
+                
+                <h2 class="fs-4 mb-0 mt-1" id="total-current-value">
+                    Atual: <i class="bi bi-arrow-repeat spin"></i> Carregando...
+                </h2>
+                <p class="mt-1 mb-0 small" id="total-variation-info">
+                    <i class="bi bi-arrow-repeat spin"></i> Calculando variação...
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-8">
+        <div class="card shadow dashboard-card">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="bi bi-bar-chart"></i> Distribuição por Tipo</h5>
+            </div>
+            <div class="card-body d-flex justify-content-center align-items-center" style="padding: 0.5rem; min-height: 140px;">
+                <div style="width: 100%; height: 120px; position: relative;">
+                    <canvas id="typeDistributionChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card shadow">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="bi bi-list-ul"></i> Detalhes da Carteira</h5>
+            </div>
+            <div class="card-body">
+                {% if portfolio %}
+                    <div class="mb-4">
+                        <ul class="nav nav-tabs" id="assetTypeTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="all-tab" data-bs-toggle="tab" data-bs-target="#all" type="button" role="tab" aria-selected="true">
+                                    Todos os Ativos
+                                </button>
+                            </li>
+                            {% for tipo in tipos_ativos %}
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="{{ tipo|replace(' ', '-')|lower }}-tab" data-bs-toggle="tab" 
+                                        data-bs-target="#{{ tipo|replace(' ', '-')|lower }}" type="button" role="tab" aria-selected="false">
+                                    {{ tipo }}
+                                </button>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    
+                    <div class="tab-content" id="assetTypeTabContent">
+                        <!-- Tab de todos os ativos -->
+                        <div class="tab-pane fade show active" id="all" role="tabpanel" aria-labelledby="all-tab">
+                            <div class="table-responsive">
+                                <table class="table table-striped table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Ticker</th>
+                                            <th>Nome</th>
+                                            <th>Tipo</th>
+                                            <th>Setor</th>
+                                            <th>Quantidade</th>
+                                            <th>Preço Médio</th>
+                                            <th>Preço Atual</th>
+                                            <th>Variação</th>
+                                            <th>Valor Total</th>
+                                            <th>% da Carteira</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for asset in portfolio %}
+                                        <tr data-ticker="{{ asset.ticker }}" 
+                                            data-has-market-price="{{ asset.has_market_price|lower }}"
+                                            data-quantity="{{ asset.quantity }}"
+                                            data-avg-price="{{ asset.avg_price }}"
+                                            data-total-value="{{ asset.total_value }}"
+                                            {% if asset.current_price %}
+                                            data-current-price="{{ asset.current_price }}"
+                                            data-current-value="{{ asset.current_price * asset.quantity }}"
+                                            data-variation-value="{{ asset.price_variation_value }}"
+                                            {% endif %}
+                                            class="asset-row">
+                                            <td><strong>{{ asset.ticker }}</strong></td>
+                                            <td>{{ asset.name }}</td>
+                                            <td>{{ asset.type }}</td>
+                                            <td>{{ asset.sector }}</td>
+                                            <td>{{ asset.quantity }}</td>
+                                            <td>R$ {{ "%.2f"|format(asset.avg_price) }}</td>
+                                            <td class="current-price-cell">
+                                                {% if asset.current_price %}
+                                                    R$ {{ "%.2f"|format(asset.current_price) }}
+                                                {% elif asset.has_market_price %}
+                                                    <i class="bi bi-arrow-repeat spin"></i> Carregando...
+                                                {% else %}
+                                                    <span class="text-muted">--</span>
+                                                {% endif %}
+                                            </td>
+                                            <td class="variation-cell">
+                                                {% if asset.price_variation is not none %}
+                                                    <div class="d-flex">
+                                                        <span class="price-variation
+                                                            {% if asset.price_variation > 0 %}text-success{% elif asset.price_variation < 0 %}text-danger{% endif %}
+                                                        ">
+                                                            <i class="bi bi-{% if asset.price_variation > 0 %}arrow-up-circle-fill{% elif asset.price_variation < 0 %}arrow-down-circle-fill{% else %}dash-circle{% endif %}"></i>
+                                                            {{ "%.2f"|format(asset.price_variation) }}%
+                                                        </span>
+                                                        <span class="ms-2 small variation-value-cell
+                                                            {% if asset.price_variation_value > 0 %}text-success{% elif asset.price_variation_value < 0 %}text-danger{% endif %}">
+                                                            (R$ {{ "%.2f"|format(asset.price_variation_value) }})
+                                                        </span>
+                                                    </div>
+                                                {% elif asset.has_market_price %}
+                                                    <i class="bi bi-arrow-repeat spin"></i> Carregando...
+                                                {% else %}
+                                                    <span class="text-muted">--</span>
+                                                {% endif %}
+                                            </td>
+                                            <td class="current-value-cell">R$ {{ "%.2f"|format(asset.total_value) }}</td>
+                                            <td>
+                                                <div class="progress-container">
+                                                    <div class="progress">
+                                                        <div class="progress-bar" role="progressbar" style="width: {{ asset.percentage }}%;">
+                                                        </div>
+                                                    </div>
+                                                    <span class="progress-text">{{ "%.2f"|format(asset.percentage) }}%</span>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                    <tfoot>
+                                        <tr class="table-primary">
+                                            <th colspan="8">Valor Total da Carteira</th>
+                                            <th>R$ {{ "%.2f"|format(total_value) }}</th>
+                                            <th>100%</th>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <!-- Tabs por tipo de ativo -->
+                        {% for tipo in tipos_ativos %}
+                        <div class="tab-pane fade" id="{{ tipo|replace(' ', '-')|lower }}" role="tabpanel" 
+                             aria-labelledby="{{ tipo|replace(' ', '-')|lower }}-tab">
+                            <div class="table-responsive">
+                                <table class="table table-striped table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Ticker</th>
+                                            <th>Nome</th>
+                                            <th>Setor</th>
+                                            <th>Quantidade</th>
+                                            <th>Preço Médio</th>
+                                            <th>Preço Atual</th>
+                                            <th>Variação</th>
+                                            <th>Valor Total</th>
+                                            <th>% do Tipo</th>
+                                            <th>% da Carteira</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% set tipo_total = namespace(value=0) %}
+                                        {% for asset in portfolio %}
+                                            {% if asset.type == tipo %}
+                                                {% set tipo_total.value = tipo_total.value + asset.total_value %}
+                                            {% endif %}
+                                        {% endfor %}
+                                        
+                                        {% for asset in portfolio %}
+                                            {% if asset.type == tipo %}
+                                            <tr data-ticker="{{ asset.ticker }}" 
+                                               data-has-market-price="{{ asset.has_market_price|lower }}"
+                                               data-quantity="{{ asset.quantity }}"
+                                               data-avg-price="{{ asset.avg_price }}"
+                                               data-total-value="{{ asset.total_value }}"
+                                               {% if asset.current_price %}
+                                               data-current-price="{{ asset.current_price }}"
+                                               data-current-value="{{ asset.current_price * asset.quantity }}"
+                                               data-variation-value="{{ asset.price_variation_value }}"
+                                               {% endif %}
+                                               class="asset-row">
+                                                <td><strong>{{ asset.ticker }}</strong></td>
+                                                <td>{{ asset.name }}</td>
+                                                <td>{{ asset.sector }}</td>
+                                                <td>{{ asset.quantity }}</td>
+                                                <td>R$ {{ "%.2f"|format(asset.avg_price) }}</td>
+                                                <td>
+                                                    {% if asset.current_price %}
+                                                        R$ {{ "%.2f"|format(asset.current_price) }}
+                                                    {% else %}
+                                                        <span class="text-muted">--</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    {% if asset.price_variation is not none %}
+                                                        <div class="d-flex">
+                                                            <span class="price-variation
+                                                                {% if asset.price_variation > 0 %}text-success{% elif asset.price_variation < 0 %}text-danger{% endif %}
+                                                            ">
+                                                                <i class="bi bi-{% if asset.price_variation > 0 %}arrow-up-circle-fill{% elif asset.price_variation < 0 %}arrow-down-circle-fill{% else %}dash-circle{% endif %}"></i>
+                                                                {{ "%.2f"|format(asset.price_variation) }}%
+                                                            </span>
+                                                            <span class="ms-2 small">
+                                                                (R$ {{ "%.2f"|format(asset.price_variation_value) }})
+                                                            </span>
+                                                        </div>
+                                                    {% else %}
+                                                        <span class="text-muted">--</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>R$ {{ "%.2f"|format(asset.total_value) }}</td>
+                                                <td>
+                                                    <div class="progress-container">
+                                                        <div class="progress">
+                                                            <div class="progress-bar bg-info" role="progressbar" 
+                                                                style="width: {{ (asset.total_value / tipo_total.value * 100) if tipo_total.value > 0 else 0 }}%;">
+                                                            </div>
+                                                        </div>
+                                                        <span class="progress-text">{{ "%.2f"|format(asset.total_value / tipo_total.value * 100 if tipo_total.value > 0 else 0) }}%</span>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <div class="progress-container">
+                                                        <div class="progress">
+                                                            <div class="progress-bar" role="progressbar" style="width: {{ asset.percentage }}%;">
+                                                            </div>
+                                                        </div>
+                                                        <span class="progress-text">{{ "%.2f"|format(asset.percentage) }}%</span>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </tbody>
+                                    <tfoot>
+                                        <tr class="table-info">
+                                            <th colspan="7">Total em {{ tipo }}</th>
+                                            <th>R$ {{ "%.2f"|format(tipo_total.value) }}</th>
+                                            <th>100%</th>
+                                            <th>{{ "%.2f"|format(tipo_total.value / total_value * 100 if total_value > 0 else 0) }}%</th>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="alert alert-info">
+                        <h5><i class="bi bi-info-circle"></i> Nenhum ativo em carteira</h5>
+                        <p>Você ainda não possui ativos na sua carteira. <a href="{{ url_for('new_asset') }}">Adicione seu primeiro ativo</a> ou <a href="{{ url_for('import_b3') }}">importe dados da B3</a>.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Gráfico de desempenho por ativo -->
+{% if portfolio %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card shadow">
+            <div class="card-header bg-warning text-white">
+                <h5 class="mb-0"><i class="bi bi-graph-up"></i> Desempenho por Ativo</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="performanceChart" style="height: 300px;"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Usar variável global no objeto window para garantir acessibilidade em todos os contextos
+window.chartInstances = {};
+
+// Função para criar ou atualizar o gráfico de distribuição por tipo
+function createOrUpdateTypeChart() {
+    // Destruir gráfico existente se houver
+    if (window.chartInstances.typeChart) {
+        window.chartInstances.typeChart.destroy();
+    }
+    
+    // Dados para o gráfico de distribuição por tipo
+    const typeData = {
+        labels: [
+            {% for item in type_distribution %}
+                "{{ item.type }} ({{ '%.2f'|format(item.percentage) }}%)",
+            {% endfor %}
+        ],
+        datasets: [{
+            data: [
+                {% for item in type_distribution %}
+                    {{ item.value }},
+                {% endfor %}
+            ],
+            backgroundColor: [
+                '#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b',
+                '#5a5c69', '#6f42c1', '#fd7e14', '#20c997', '#6c757d'
+            ],
+            hoverOffset: 4
+        }]
+    };
+
+    // Verificar se o elemento canvas existe
+    const chartElement = document.getElementById('typeDistributionChart');
+    if (!chartElement) return;
+    
+    const ctx = chartElement.getContext('2d');
+    
+    // Criar o gráfico com ajustes de layout mais compacto
+    window.chartInstances.typeChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: typeData,
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            layout: {
+                padding: 0
+            },
+            plugins: {
+                legend: {
+                    position: 'right',
+                    labels: {
+                        boxWidth: 10,
+                        padding: 5,
+                        font: {
+                            size: 10
+                        }
+                    }
+                },
+                tooltip: {
+                    displayColors: false,
+                    callbacks: {
+                        label: function(context) {
+                            return 'R$ ' + context.raw.toFixed(2) + ' (' + context.label + ')';
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Função para criar o gráfico de desempenho
+function createPerformanceChart(useRealTimeData = false) {
+    // Destruir gráfico existente se houver
+    if (window.chartInstances.performanceChart) {
+        window.chartInstances.performanceChart.destroy();
+    }
+    
+    // Verificar se o elemento canvas existe
+    const chartElement = document.getElementById('performanceChart');
+    if (!chartElement) return;
+    
+    // Preparar dados para o gráfico
+    const assets = [];
+    const variations = [];
+    const backgroundColors = [];
+    
+    if (useRealTimeData) {
+        // Usar os dados atualizados em tempo real
+        document.querySelectorAll('[data-ticker][data-has-market-price="True"]').forEach(row => {
+            const ticker = row.getAttribute('data-ticker');
+            const avgPrice = parseFloat(row.getAttribute('data-avg-price') || 0);
+            const priceCell = row.querySelector('.current-price-cell');
+            
+            if (priceCell && !priceCell.textContent.includes('Carregando')) {
+                // Extrair o preço atual do texto da célula
+                const priceText = priceCell.textContent.trim().replace('R$ ', '').replace(',', '.');
+                const currentPrice = parseFloat(priceText);
+                
+                if (!isNaN(currentPrice) && currentPrice > 0) {
+                    const variation = ((currentPrice / avgPrice) - 1) * 100;
+                    
+                    assets.push(ticker);
+                    variations.push(variation);
+                    
+                    if (variation > 0) {
+                        backgroundColors.push('#1cc88a');
+                    } else if (variation < 0) {
+                        backgroundColors.push('#e74a3b');
+                    } else {
+                        backgroundColors.push('#858796');
+                    }
+                }
+            }
+        });
+    } else {
+        // Usar os dados pré-carregados do servidor
+        {% for asset in portfolio %}
+            {% if asset.price_variation is not none %}
+                assets.push("{{ asset.ticker }}");
+                variations.push({{ asset.price_variation }});
+                
+                {% if asset.price_variation > 0 %}
+                    backgroundColors.push('#1cc88a');
+                {% elif asset.price_variation < 0 %}
+                    backgroundColors.push('#e74a3b');
+                {% else %}
+                    backgroundColors.push('#858796');
+                {% endif %}
+            {% endif %}
+        {% endfor %}
+    }
+    
+    const ctx = chartElement.getContext('2d');
+    
+    // Criar o gráfico
+    window.chartInstances.performanceChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: assets,
+            datasets: [{
+                label: 'Variação (%)',
+                data: variations,
+                backgroundColor: backgroundColors,
+                borderColor: backgroundColors,
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    grid: {
+                        drawBorder: false
+                    },
+                    ticks: {
+                        callback: function(value) {
+                            return value + '%';
+                        }
+                    }
+                },
+                x: {
+                    grid: {
+                        display: false
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.dataset.label + ': ' + context.raw.toFixed(2) + '%';
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Função personalizada para o carregamento e atualização de preços em tempo real
+function fetchAndUpdatePrices() {
+    // Verificar se há tickers para buscar
+    const marketTickersElement = document.getElementById('market-tickers');
+    if (!marketTickersElement) {
+        console.error('Elemento market-tickers não encontrado');
+        return;
+    }
+    
+    let tickers = [];
+    try {
+        let tickersData = marketTickersElement.getAttribute('data-tickers');
+        if (tickersData && tickersData.trim() !== '' && tickersData !== '[]') {
+            // Making sure we have valid JSON by handling various edge cases
+            tickersData = tickersData.replace(/'/g, '"').trim();
+            
+            // Remove HTML escaping that might be present
+            tickersData = tickersData.replace(/&quot;/g, '"')
+                                   .replace(/&#34;/g, '"')
+                                   .replace(/&apos;/g, "'")
+                                   .replace(/&#39;/g, "'");
+            
+            // Make sure brackets are properly matched
+            if (!tickersData.startsWith('[')) tickersData = '[' + tickersData;
+            if (!tickersData.endsWith(']')) tickersData += ']';
+            
+            // Ensure commas are correctly placed
+            tickersData = tickersData.replace(/,\s*]/g, ']'); // Remove trailing commas
+
+            console.log('Attempting to parse tickers JSON:', tickersData);
+            
+            try {
+                tickers = JSON.parse(tickersData);
+                console.log('Tickers parsed successfully:', tickers);
+            } catch (innerError) {
+                console.error('Could not parse JSON after corrections:', innerError, tickersData);
+                throw innerError; // Propagate error to fallback
+            }
+        } else {
+            console.warn('Data-tickers attribute is empty or invalid');
+        }
+    } catch (e) {
+        console.error('Error processing tickers JSON:', e);
+        // Fallback: collect tickers directly from table rows
+        document.querySelectorAll('tr[data-ticker][data-has-market-price="True"]').forEach(row => {
+            const ticker = row.getAttribute('data-ticker');
+            if (ticker && ticker.trim() !== '') {
+                tickers.push(ticker);
+            }
+        });
+    }
+    
+    if (!tickers || tickers.length === 0) {
+        console.warn('Nenhum ticker encontrado para buscar preços');
+        // Atualizar UI para mostrar que não há dados disponíveis
+        const totalCurrentValueElement = document.getElementById('total-current-value');
+        if (totalCurrentValueElement) {
+            totalCurrentValueElement.innerHTML = 'Atual: Dados indisponíveis';
+        }
+        const totalVariationInfoElement = document.getElementById('total-variation-info');
+        if (totalVariationInfoElement) {
+            totalVariationInfoElement.innerHTML = 'Não foi possível calcular a variação';
+        }
+        
+        // Esconder indicador de carregamento
+        const loadingIndicator = document.getElementById('loading-prices');
+        if (loadingIndicator) {
+            loadingIndicator.style.display = 'none';
+        }
+        return;
+    }
+    
+    console.log('Tickers para busca:', tickers);
+    
+    // Mostrar indicador de carregamento
+    const loadingIndicator = document.getElementById('loading-prices');
+    if (loadingIndicator) {
+        loadingIndicator.style.display = 'inline-block';
+    }
+    
+    // Fazer requisição para a API
+    fetch('/api/prices', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({ tickers: tickers }),
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`Erro na resposta do servidor: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        // Verificar se a resposta contém dados válidos
+        if (!data || !data.prices) {
+            console.error('A resposta da API não contém dados de preços válidos');
+            throw new Error('Dados de preços inválidos ou ausentes');
+        }
+        
+        const prices = data.prices;
+        console.log('Preços recebidos:', prices);
+        
+        // Variáveis para recalcular os totais
+        let totalCurrentValue = 0;
+        let totalVariationValue = 0;
+        let totalInvestedValue = 0;
+        let totalAssetsWithPrice = 0;
+        
+        // Atualizar os preços na tabela
+        document.querySelectorAll('tr[data-ticker]').forEach(row => {
+            const ticker = row.getAttribute('data-ticker');
+            const hasMarketPrice = row.getAttribute('data-has-market-price') === 'True';
+            const quantity = parseFloat(row.getAttribute('data-quantity') || 0);
+            const avgPrice = parseFloat(row.getAttribute('data-avg-price') || 0);
+            const investedValue = parseFloat(row.getAttribute('data-total-value') || 0);
+            
+            totalInvestedValue += investedValue;
+            
+            // Atualizar valores para ativos com preço de mercado
+            if (hasMarketPrice && prices && ticker in prices) {
+                let currentPrice = null;
+                
+                // Verificar o formato do preço retornado (pode ser um número ou um objeto)
+                if (typeof prices[ticker] === 'object' && prices[ticker] !== null) {
+                    currentPrice = parseFloat(prices[ticker].price || 0);
+                } else {
+                    currentPrice = parseFloat(prices[ticker] || 0);
+                }
+                
+                // Continuar apenas se o preço for válido
+                if (currentPrice && !isNaN(currentPrice) && currentPrice > 0) {
+                    const currentValue = currentPrice * quantity;
+                    const variationValue = currentValue - investedValue;
+                    const variationPercent = avgPrice > 0 ? ((currentPrice / avgPrice) - 1) * 100 : 0;
+                    
+                    // Atualizar células na tabela
+                    const priceCell = row.querySelector('.current-price-cell');
+                    const variationCell = row.querySelector('.variation-cell');
+                    const valueCell = row.querySelector('.current-value-cell');
+                    
+                    if (priceCell) {
+                        priceCell.innerHTML = `R$ ${currentPrice.toFixed(2)}`;
+                    }
+                    
+                    if (variationCell) {
+                        const variationClass = variationPercent >= 0 ? 'text-success' : 'text-danger';
+                        const variationIcon = variationPercent >= 0 ? 
+                            '<i class="bi bi-arrow-up-circle-fill"></i>' : 
+                            '<i class="bi bi-arrow-down-circle-fill"></i>';
+                        
+                        variationCell.innerHTML = `
+                            <div class="d-flex">
+                                <span class="${variationClass}">
+                                    ${variationIcon}
+                                    ${variationPercent.toFixed(2)}%
+                                </span>
+                                <span class="ms-2 small variation-value-cell ${variationClass}">
+                                    (R$ ${variationValue.toFixed(2)})
+                                </span>
+                            </div>
+                        `;
+                    }
+                    
+                    if (valueCell) {
+                        valueCell.innerHTML = `R$ ${currentValue.toFixed(2)}`;
+                    }
+                    
+                    // Atualizar totais
+                    totalCurrentValue += currentValue;
+                    totalVariationValue += variationValue;
+                    totalAssetsWithPrice++;
+                    
+                    // Atualizar atributos para uso posterior
+                    row.setAttribute('data-current-price', currentPrice);
+                    row.setAttribute('data-current-value', currentValue);
+                    row.setAttribute('data-variation-value', variationValue);
+                    row.setAttribute('data-variation-percent', variationPercent);
+                } else {
+                    console.warn(`Preço inválido para ${ticker}: ${currentPrice}`);
+                    // Limpar valores se o preço não for válido
+                    const priceCell = row.querySelector('.current-price-cell');
+                    const variationCell = row.querySelector('.variation-cell');
+                    
+                    if (priceCell) {
+                        priceCell.innerHTML = '<span class="text-muted">--</span>';
+                    }
+                    
+                    if (variationCell) {
+                        variationCell.innerHTML = '<span class="text-muted">--</span>';
+                    }
+                }
+            }
+        });
+        
+        // Atualizar totais da carteira
+        const totalCurrentValueElement = document.getElementById('total-current-value');
+        const totalVariationInfoElement = document.getElementById('total-variation-info');
+        
+        if (totalAssetsWithPrice > 0) {
+            // Calcular percentual de variação total
+            const totalVariationPercent = totalInvestedValue > 0 ? 
+                (totalVariationValue / totalInvestedValue) * 100 : 0;
+            
+            // Formatar com classe baseada na variação
+            const variationClass = totalVariationValue >= 0 ? 'text-success' : 'text-danger';
+            const variationIcon = totalVariationValue >= 0 ? 
+                '<i class="bi bi-arrow-up-circle-fill"></i>' : 
+                '<i class="bi bi-arrow-down-circle-fill"></i>';
+            
+            // Atualizar elementos no DOM
+            if (totalCurrentValueElement) {
+                totalCurrentValueElement.innerHTML = `Atual: R$ ${totalCurrentValue.toFixed(2)}`;
+            }
+            
+            if (totalVariationInfoElement) {
+                totalVariationInfoElement.className = variationClass;
+                totalVariationInfoElement.innerHTML = `
+                    ${variationIcon} ${totalVariationPercent >= 0 ? '+' : ''}${totalVariationPercent.toFixed(2)}% 
+                    (${totalVariationValue >= 0 ? '+' : ''}R$ ${totalVariationValue.toFixed(2)})
+                `;
+            }
+            
+            // Atualizar o gráfico com os dados em tempo real
+            createPerformanceChart(true);
+        } else {
+            console.warn('Nenhum ativo com preço válido para calcular totais');
+            
+            if (totalCurrentValueElement) {
+                totalCurrentValueElement.innerHTML = 'Atual: Sem dados';
+            }
+            
+            if (totalVariationInfoElement) {
+                totalVariationInfoElement.className = 'text-muted';
+                totalVariationInfoElement.innerHTML = 'Não foi possível calcular a variação';
+            }
+        }
+        
+        // Esconder indicador de carregamento
+        if (loadingIndicator) {
+            loadingIndicator.style.display = 'none';
+        }
+    })
+    .catch(error => {
+        console.error('Erro ao buscar ou processar preços:', error);
+        
+        // Esconder indicador de carregamento
+        if (loadingIndicator) {
+            loadingIndicator.style.display = 'none';
+        }
+        
+        // Mostrar mensagem de erro
+        const totalCurrentValueElement = document.getElementById('total-current-value');
+        if (totalCurrentValueElement) {
+            totalCurrentValueElement.innerHTML = 'Atual: Erro ao carregar';
+        }
+        
+        const totalVariationInfoElement = document.getElementById('total-variation-info');
+        if (totalVariationInfoElement) {
+            totalVariationInfoElement.className = 'text-danger';
+            totalVariationInfoElement.innerHTML = 'Erro ao buscar preços atuais';
+        }
+        
+        // Limpar indicadores de carregamento em todas as células
+        document.querySelectorAll('.current-price-cell, .variation-cell').forEach(cell => {
+            if (cell.innerHTML.includes('Carregando')) {
+                cell.innerHTML = '<span class="text-muted">--</span>';
+            }
+        });
+    });
+}
+
+// Inicializar gráficos quando o DOM estiver carregado
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Dashboard inicializado');
+    
+    // Criar os gráficos iniciais
+    createOrUpdateTypeChart();
+    createPerformanceChart();
+    
+    // Buscar preços atuais após carregar a página
+    fetchAndUpdatePrices();
+    
+    // Adicionar evento para o botão de atualização de preços
+    const refreshButton = document.getElementById('refresh-prices-btn');
+    if (refreshButton) {
+        refreshButton.addEventListener('click', function() {
+            fetchAndUpdatePrices();
+        });
+    }
+});
+</script>
+{% endblock %}
