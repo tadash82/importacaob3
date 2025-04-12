@@ -380,8 +380,7 @@ function updatePrices(pricesData) {
                     }
                 }
                 
-                // Em vez de usar continue, vamos encerrar esta iteração usando return para o callback da função forEach
-                return;
+                return; // Encerrar o processamento para este ativo
             }
             
             // PROCESSAMENTO DE ATIVOS COM PREÇO DE MERCADO
@@ -426,7 +425,7 @@ function updatePrices(pricesData) {
                     
                     console.log(`${ticker}: variação calculada=${variation.toFixed(2)}%, valor atual=${currentTotalValue.toFixed(2)}, variação em valor=${variationValue.toFixed(2)}`);
                     
-                    // Atualizar célula de variação
+                    // Atualizar célula de variação - CORRIGIDO PARA MOSTRAR VALOR DIFERENTE DA CÉLULA DE VALOR TOTAL
                     variationCell.innerHTML = `
                         <div class="d-flex">
                             <span class="${variationClass}">
@@ -440,7 +439,7 @@ function updatePrices(pricesData) {
                     `;
                     console.log(`Variação atualizada no DOM para ${ticker}`);
                     
-                    // Atualizar o valor total atual
+                    // Atualizar o valor total atual - SEPARADO DA ATUALIZAÇÃO DA VARIAÇÃO
                     if (currentValueCell) {
                         currentValueCell.textContent = `R$ ${currentTotalValue.toFixed(2)}`;
                         console.log(`Valor atual atualizado para ${ticker}: R$ ${currentTotalValue.toFixed(2)}`);
@@ -449,6 +448,12 @@ function updatePrices(pricesData) {
                     // Somar ao total geral
                     totalCurrentValue += currentTotalValue;
                     assetsWithPrice++;
+                    
+                    // Armazenar os valores calculados nos atributos data-* para uso posterior
+                    row.setAttribute('data-current-price', currentPrice);
+                    row.setAttribute('data-current-value', currentTotalValue);
+                    row.setAttribute('data-variation-value', variationValue);
+                    row.setAttribute('data-variation-percent', variation);
                     
                     console.log(`Ticker ${ticker}: valor atual=${currentTotalValue}, variação=${variationValue}`);
                 } else {
@@ -538,6 +543,23 @@ function updatePortfolioTotals(totalValue, totalCurrentValue, assetsWithPrice) {
         });
         
         return;
+    }
+    
+    // Inclui valores de renda fixa pré-carregados do servidor
+    let fixedIncomeValue = 0;
+    document.querySelectorAll('tr[data-ticker][data-has-market-price="false"][data-current-value]').forEach(row => {
+        if (row.closest('#all')) {  // Contar apenas da aba "all" para evitar duplicação
+            const currentValue = parseFloat(row.getAttribute('data-current-value') || 0);
+            if (!isNaN(currentValue) && currentValue > 0) {
+                fixedIncomeValue += currentValue;
+                console.log(`Renda fixa incluída no total: ${row.getAttribute('data-ticker')}, R$ ${currentValue.toFixed(2)}`);
+            }
+        }
+    });
+    
+    if (fixedIncomeValue > 0) {
+        totalCurrentValue += fixedIncomeValue;
+        console.log(`Adicionado valor de renda fixa aos totais: R$ ${fixedIncomeValue.toFixed(2)}`);
     }
     
     // Calcular variação total

@@ -5,7 +5,8 @@ from datetime import datetime
 import pandas as pd
 import os
 import logging
-from app.services.price_service import get_current_prices  # Corrigindo a importação
+
+# from app.services.price_service import get_current_prices  # Corrigindo a importação
 
 # Configurar logging
 logger = logging.getLogger(__name__)
@@ -19,8 +20,8 @@ def normalize_ticker(ticker):
     return ticker[:-1] if ticker.endswith("F") and len(ticker) > 1 else ticker
 
 
-@app.route("/")
-def home():
+@app.route("/dashboard")
+def dashboard():
     assets = Asset.query.all()
 
     # Agrupar ativos pelo ticker normalizado
@@ -54,7 +55,11 @@ def home():
     # Constrói a lista de portfolio agrupada
     portfolio_data = []
     total_value = 0
+    total_current_value = 0  # Inicializar valor atual total
     tipos_ativos = set()  # Conjunto para armazenar os tipos únicos de ativos
+
+    # Dicionário para acompanhar o valor por tipo de ativo
+    type_value_map = {}
 
     for normalized_ticker, data in assets_by_ticker.items():
         if data["quantity"] > 0:
@@ -69,6 +74,11 @@ def home():
             )
             tipos_ativos.add(asset_type)  # Adicionar o tipo ao conjunto
 
+            # Atualizar o valor total por tipo
+            if asset_type not in type_value_map:
+                type_value_map[asset_type] = 0
+            type_value_map[asset_type] += total_investment
+
             # Calcular preço médio ponderado
             avg_price = (
                 total_investment / data["quantity"] if data["quantity"] > 0 else 0
@@ -78,6 +88,7 @@ def home():
             current_price = None
             price_variation = None
             price_variation_value = None
+            current_value = total_investment  # Valor padrão é o investimento
 
             if not has_market_price:
                 # Buscar o ativo original para acessar os métodos
@@ -86,16 +97,37 @@ def home():
                 )
 
                 if original_asset:
-                    # Se tiver rendimento calculado
-                    yield_info = original_asset.calculate_yield()
-                    if yield_info:
-                        current_price = (
-                            yield_info["current_value"] / data["quantity"]
-                            if data["quantity"] > 0
-                            else 0
-                        )
-                        price_variation = yield_info["percentage_yield"]
-                        price_variation_value = yield_info["absolute_yield"]
+                    # Sempre obter o valor atual, que pode ser o valor atualizado ou o investimento
+                    asset_current_value = original_asset.get_current_value()
+
+                    # Calcular preço unitário e variações
+                    current_price = (
+                        asset_current_value / data["quantity"]
+                        if data["quantity"] > 0
+                        else 0
+                    )
+                    current_value = asset_current_value
+
+                    # Calcular variação mesmo se não tiver yield_info
+                    if total_investment > 0:
+                        price_variation = (
+                            (asset_current_value / total_investment) - 1
+                        ) * 100
+                        price_variation_value = asset_current_value - total_investment
+                    else:
+                        price_variation = 0
+                        price_variation_value = 0
+
+                    logger.info(
+                        f"Ativo renda fixa {normalized_ticker}: valor investido={total_investment}, "
+                        f"valor atual={asset_current_value}, variação={price_variation}%"
+                    )
+
+            # Adicionar o valor atual ao total da carteira
+            if not has_market_price and current_value is not None:
+                total_current_value += current_value
+            else:
+                total_current_value += total_investment  # Usar o valor de custo para ativos de mercado (será atualizado via JS)
 
             portfolio_data.append(
                 {
@@ -109,6 +141,9 @@ def home():
                     "current_price": current_price,
                     "price_variation": price_variation,
                     "price_variation_value": price_variation_value,
+                    "current_value": (
+                        current_value if not has_market_price else None
+                    ),  # Incluir valor atual para renda fixa
                 }
             )
 
@@ -135,176 +170,46 @@ def home():
     # Converter o conjunto de tipos para uma lista ordenada
     tipos_ativos = sorted(list(tipos_ativos))
 
-    return render_template(
-        "index.html",
-        portfolio=portfolio_data,
-        total_value=total_value,
-        total_current_value=total_value,  # Inicialmente igual ao valor de custo
-        total_variation_value=0,  # Será atualizado via JavaScript
-        total_variation_percent=0,  # Será atualizado via JavaScript
-        tipos_ativos=tipos_ativos,
-        market_tickers=tickers_to_check,  # Novos parâmetros para uso no JavaScript
+    # Criar dados para o gráfico de distribuição por tipo
+    type_distribution = []
+    for asset_type, type_value in type_value_map.items():
+        percentage = (type_value / total_value * 100) if total_value > 0 else 0
+        type_distribution.append(
+            {"type": asset_type, "value": type_value, "percentage": percentage}
+        )
+
+    # Ordenar a distribuição por valor (do maior para o menor)
+    type_distribution = sorted(
+        type_distribution, key=lambda x: x["value"], reverse=True
     )
 
+    import json
 
-# Rota para visualizar o dashboard
-@app.route("/dashboard")
-def dashboard():
-    assets = Asset.query.all()
+    # Serializar corretamente os tickers para uso no JavaScript
+    tickers_json = json.dumps(tickers_to_check)
 
-    # Agrupar ativos pelo ticker normalizado
-    assets_by_ticker = {}
-    asset_types = {}
-    tipos_ativos = set()  # Conjunto para armazenar os tipos únicos de ativos
+    # Calcular variação total para os dados de renda fixa
+    total_variation_value = total_current_value - total_value
+    total_variation_percent = (
+        (total_current_value / total_value - 1) * 100 if total_value > 0 else 0
+    )
 
-    for asset in assets:
-        normalized_ticker = normalize_ticker(asset.ticker)
-
-        # Se o ticker não existe no dicionário, cria uma entrada nova
-        if normalized_ticker not in assets_by_ticker:
-            assets_by_ticker[normalized_ticker] = {
-                "assets": [],
-                "quantity": 0,
-                "total_investment": 0,
-                "name": asset.name,
-                "type": asset.type,
-                "sector": asset.sector,
-            }
-
-        # Adiciona o asset ao grupo
-        assets_by_ticker[normalized_ticker]["assets"].append(asset)
-
-        # Acumula quantidade e valor
-        quantity = asset.current_quantity()
-        if quantity > 0:
-            avg_price = asset.calculate_average_price()
-            asset_value = quantity * avg_price
-
-            assets_by_ticker[normalized_ticker]["quantity"] += quantity
-            assets_by_ticker[normalized_ticker]["total_investment"] += asset_value
-
-            # Agrupar por tipo de ativo
-            asset_type = asset.type
-            tipos_ativos.add(asset_type)  # Adicionar o tipo ao conjunto
-            if asset_type not in asset_types:
-                asset_types[asset_type] = 0
-            asset_types[asset_type] += asset_value
-
-    # Constrói a lista de portfolio agrupada
-    portfolio_data = []
-    total_value = 0
-    total_current_value = 0
-
-    for normalized_ticker, data in assets_by_ticker.items():
-        if data["quantity"] > 0:
-            # Valores investidos por ativo
-            total_investment = data["total_investment"]
-            total_value += total_investment
-
-            # Usar o nome do primeiro ativo no grupo (geralmente serão iguais)
-            name = data["assets"][0].name if len(data["assets"]) > 0 else ""
-            asset_type = data["assets"][0].type if len(data["assets"]) > 0 else ""
-            sector = data["assets"][0].sector if len(data["assets"]) > 0 else ""
-            has_market_price = (
-                data["assets"][0].has_market_price if len(data["assets"]) > 0 else True
-            )
-
-            # Calcular preço médio ponderado
-            avg_price = (
-                total_investment / data["quantity"] if data["quantity"] > 0 else 0
-            )
-
-            # Para ativos de renda fixa, buscar valores atualizados se existirem
-            current_price = None
-            price_variation = None
-            price_variation_value = None
-
-            if not has_market_price:
-                # Buscar o ativo original para acessar os métodos
-                original_asset = next(
-                    (a for a in data["assets"] if a.ticker == normalized_ticker), None
-                )
-
-                if original_asset:
-                    # Se tiver rendimento calculado
-                    yield_info = original_asset.calculate_yield()
-                    if yield_info:
-                        current_price = (
-                            yield_info["current_value"] / data["quantity"]
-                            if data["quantity"] > 0
-                            else 0
-                        )
-                        price_variation = yield_info["percentage_yield"]
-                        price_variation_value = yield_info["absolute_yield"]
-                        total_current_value += yield_info["current_value"]
-            else:
-                # Para ativos de mercado, o valor atual será atualizado via JavaScript
-                total_current_value += total_investment
-
-            # Criar item para o portfolio
-            portfolio_item = {
-                "ticker": normalized_ticker,
-                "name": name,
-                "type": asset_type,
-                "sector": sector,
-                "quantity": data["quantity"],
-                "avg_price": avg_price,
-                "total_value": total_investment,
-                "has_market_price": has_market_price,
-                "current_price": current_price,
-                "price_variation": price_variation,
-                "price_variation_value": price_variation_value,
-            }
-
-            portfolio_data.append(portfolio_item)
-
-    # Transformar os tipos de ativos em dados para o gráfico
-    type_distribution = [
-        {
-            "type": k,
-            "value": v,
-            "percentage": (v / total_value * 100 if total_value > 0 else 0),
-        }
-        for k, v in asset_types.items()
-    ]
-
-    # Converter o conjunto de tipos para uma lista ordenada
-    tipos_ativos = sorted(list(tipos_ativos))
-
-    # Coletando tickers para buscar preços para uso no JavaScript
-    tickers_to_check = []
-    has_market_price_map = {}
-
-    for asset_item in portfolio_data:
-        ticker = asset_item["ticker"]
-        has_market_price = asset_item["has_market_price"]
-
-        # Verificar se o ticker é válido para consulta
-        if ticker and has_market_price:
-            tickers_to_check.append(ticker)
-            has_market_price_map[ticker] = True
-
-    # Calcular porcentagem de cada ativo na carteira
-    for asset_item in portfolio_data:
-        if total_value > 0:
-            asset_item["percentage"] = (asset_item["total_value"] / total_value) * 100
-        else:
-            asset_item["percentage"] = 0
+    logger.info(
+        f"Dashboard: total_value={total_value}, total_current_value={total_current_value}, "
+        f"variation={total_variation_percent}%"
+    )
 
     return render_template(
         "dashboard.html",
         portfolio=portfolio_data,
         total_value=total_value,
-        total_current_value=total_current_value,
-        total_variation_value=total_current_value - total_value,
-        total_variation_percent=(
-            (total_current_value - total_value) / total_value * 100
-            if total_value > 0
-            else 0
-        ),
-        type_distribution=type_distribution,
+        total_current_value=total_current_value,  # Valor atual total incluindo renda fixa
+        total_variation_value=total_variation_value,  # Variação total
+        total_variation_percent=total_variation_percent,  # Percentual de variação
         tipos_ativos=tipos_ativos,
-        market_tickers=tickers_to_check,
+        market_tickers=tickers_to_check,  # Lista original para uso em Python
+        market_tickers_json=tickers_json,  # JSON serializado para uso em JavaScript
+        type_distribution=type_distribution,  # Adicionado dados para o gráfico de distribuição
     )
 
 
@@ -1095,3 +1000,9 @@ def api_get_prices():
             jsonify({"success": False, "error": "Erro interno", "message": str(e)}),
             500,
         )
+
+
+@app.route("/")
+def home():
+    """Redireciona a rota raiz para o dashboard"""
+    return redirect(url_for("dashboard"))
